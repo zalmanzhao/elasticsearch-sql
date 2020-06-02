@@ -4,7 +4,6 @@ import (
 	"database/sql/driver"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -47,6 +46,7 @@ type esResult struct {
 	Took    int64           `json:"took"`
 	Shards interface{}       `json:"_shards"`
 }
+
 
 func newRows(dsn string, query string) (*Rows, error) {
 	return esRequest(dsn, query)
@@ -114,8 +114,6 @@ func getEs(dsn string, body string) (string, error) {
 		return "", err
 	}
 
-	fmt.Println(body)
-
 	client := http.Client{}
 	req, err := http.NewRequest("GET", urld + url.PathEscape(body), nil)
 	if err != nil {
@@ -146,55 +144,82 @@ func getEs(dsn string, body string) (string, error) {
 }
 
 func esRequest(dsn string, body string) (*Rows, error) {
+	if body == "show tables" {
+		body = "show tables like %"
+	}
 	esResp, err := getEs(dsn, body)
 	if err != nil {
 		return nil, err
 	}
-
-	esResult := esResult{}
-	err = json.Unmarshal([]byte(esResp), &esResult)
-	if err != nil {
-		return nil, err
-	}
-
 	var columns []string
 	var types []esType
 	var rows [][]driver.Value
-	var i = 0
-	for _, h := range esResult.Hits.Hits{
-		var row []driver.Value
-		for k, v := range h.Source {
-			if reflect.TypeOf(v).Kind().String() == "slice" {
-				continue
-			}
-			if reflect.TypeOf(v).Kind().String() == "map" {
-				for ek, ev := range v.(map[string]interface{}) {
+
+	if body == "show tables like %" {
+		esResult := make(map[string]interface{})
+		err = json.Unmarshal([]byte(esResp), &esResult)
+		if err != nil {
+			return nil, err
+		}
+
+		columns = append(columns, "name")
+		for table := range esResult {
+			var row []driver.Value
+			row = append(row, table)
+			rows = append(rows, row)
+		}
+
+		return &Rows{
+				dsn:     dsn,
+				columns: columns,
+				types:   types,
+				rows:    rows,
+				cursor:  "1",
+			},
+			nil
+	} else {
+		esResult := esResult{}
+		err = json.Unmarshal([]byte(esResp), &esResult)
+		if err != nil {
+			return nil, err
+		}
+
+		var i = 0
+		for _, h := range esResult.Hits.Hits {
+			var row []driver.Value
+			for k, v := range h.Source {
+				if reflect.TypeOf(v).Kind().String() == "slice" {
+					continue
+				}
+				if reflect.TypeOf(v).Kind().String() == "map" {
+					for ek, ev := range v.(map[string]interface{}) {
+						if i == 0 {
+							columns = append(columns, ek)
+							types = append(types, "string")
+						}
+						row = append(row, ev.(string))
+					}
+				} else {
 					if i == 0 {
-						columns = append(columns, ek)
+						columns = append(columns, k)
 						types = append(types, "string")
 					}
-					row = append(row, ev.(string))
+					row = append(row, v.(string))
 				}
-			} else {
-				if i == 0 {
-					columns = append(columns, k)
-					types = append(types, "string")
-				}
-				row = append(row, v.(string))
 			}
+			rows = append(rows, row)
+			i++
 		}
-		rows = append(rows, row)
-		i ++
-	}
 
-	return &Rows{
-			dsn:     dsn,
-			columns: columns,
-			types:   types,
-			rows:    rows,
-			cursor:  esResult.Cursor,
-		},
-		nil
+		return &Rows{
+				dsn:     dsn,
+				columns: columns,
+				types:   types,
+				rows:    rows,
+				cursor:  esResult.Cursor,
+			},
+			nil
+	}
 }
 
 func typeConvert(t esType, value interface{}) driver.Value {
