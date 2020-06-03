@@ -15,7 +15,7 @@ func (r *Rows) ColumnTypeLength(index int) (length int64, ok bool) {
 		return 64, true
 	case esBoolean:
 		return 1, true
-	case esDatetime:
+	case esDatetime, esDate:
 		return 24, true
 	case esNull:
 		return 0, true

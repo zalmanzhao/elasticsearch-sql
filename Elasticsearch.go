@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -26,25 +27,12 @@ type esColumnInfo struct {
 }
 
 type esResult struct {
-	Columns []esColumnInfo  `json:"columns"`
-	Rows    [][]interface{} `json:"rows"`
+	Columns []esColumnInfo  `json:"schema"`
+	Rows    [][]interface{} `json:"datarows"`
 	Cursor  string          `json:"Cursor"`
-	Hits    struct{
-		Total struct{
-			Value int64 `json:"value"`
-			Relation string `json:"relation"`
-		} `json:"total"`
-		MaxScore float64 `json:"max_score"`
-		Hits []struct{
-			Index string `json:"_index"`
-			Type string `json:"_type"`
-			ID string `json:"_id"`
-			Score float64 `json:"_score"`
-			Source map[string]interface{} `json:"_source"`
-		} `json:"hits"`
-	}     `json:"hits"`
-	Took    int64           `json:"took"`
-	Shards interface{}       `json:"_shards"`
+	Total   int64           `json:"total"`
+	Status  int64           `json:"status"`
+	Size    int64           `json:"size"`
 }
 
 
@@ -105,7 +93,7 @@ func parsingDSN(dsn string) (url, username, password string, err error) {
 		}
 	}
 
-	return protocal + "://" + address + ":" + port + "/_opendistro/_sql?sql=", username, password, nil
+	return protocal + "://" + address + ":" + port + "/_opendistro/_sql?format=jdbc&sql=", username, password, nil
 }
 
 func getEs(dsn string, body string) (string, error) {
@@ -115,7 +103,7 @@ func getEs(dsn string, body string) (string, error) {
 	}
 
 	client := http.Client{}
-	req, err := http.NewRequest("GET", urld + url.PathEscape(body), nil)
+	req, err := http.NewRequest("GET", urld + url.PathEscape(strings.ReplaceAll(body, ";", "")), nil)
 	if err != nil {
 		return "", err
 	}
@@ -151,80 +139,49 @@ func esRequest(dsn string, body string) (*Rows, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	esResult := esResult{}
+	err = json.Unmarshal([]byte(esResp), &esResult)
+	if err != nil {
+		return nil, err
+	}
+	if esResult.Status != 200 {
+		return nil, errors.New("Invalid SQL query")
+	}
+
 	var columns []string
 	var types []esType
-	var rows [][]driver.Value
-
-	if body == "show tables like %" {
-		esResult := make(map[string]interface{})
-		err = json.Unmarshal([]byte(esResp), &esResult)
-		if err != nil {
-			return nil, err
-		}
-
-		columns = append(columns, "name")
-		for table := range esResult {
-			var row []driver.Value
-			row = append(row, table)
-			rows = append(rows, row)
-		}
-
-		return &Rows{
-				dsn:     dsn,
-				columns: columns,
-				types:   types,
-				rows:    rows,
-				cursor:  "1",
-			},
-			nil
-	} else {
-		esResult := esResult{}
-		err = json.Unmarshal([]byte(esResp), &esResult)
-		if err != nil {
-			return nil, err
-		}
-
-		var i = 0
-		for _, h := range esResult.Hits.Hits {
-			var row []driver.Value
-			for k, v := range h.Source {
-				if reflect.TypeOf(v).Kind().String() == "slice" {
-					continue
-				}
-				if reflect.TypeOf(v).Kind().String() == "map" {
-					for ek, ev := range v.(map[string]interface{}) {
-						if i == 0 {
-							columns = append(columns, ek)
-							types = append(types, "string")
-						}
-						row = append(row, ev.(string))
-					}
-				} else {
-					if i == 0 {
-						columns = append(columns, k)
-						types = append(types, "string")
-					}
-					row = append(row, v.(string))
-				}
-			}
-			rows = append(rows, row)
-			i++
-		}
-
-		return &Rows{
-				dsn:     dsn,
-				columns: columns,
-				types:   types,
-				rows:    rows,
-				cursor:  esResult.Cursor,
-			},
-			nil
+	for _, columnInfo := range esResult.Columns {
+		columns = append(columns, columnInfo.Name)
+		types = append(types, columnInfo.Type)
 	}
+
+	var rows [][]driver.Value
+	for _, values := range esResult.Rows {
+		var row []driver.Value
+		for i, value := range values {
+			row = append(row, typeConvert(types[i], value))
+		}
+		rows = append(rows, row)
+	}
+
+	return &Rows{
+			dsn:     dsn,
+			columns: columns,
+			types:   types,
+			rows:    rows,
+			cursor:  esResult.Cursor,
+		},
+		nil
+
 }
 
 func typeConvert(t esType, value interface{}) driver.Value {
 	//Unsupported
 	//esBinary, esByte, esObject, esNested, esUnsupported
+	if value == nil {
+		return ""
+	}
 	switch t {
 	case esKeyword, esText, esIP:
 		return value.(string)
@@ -234,7 +191,11 @@ func typeConvert(t esType, value interface{}) driver.Value {
 		return int(value.(float64))
 	case esBoolean:
 		return value.(bool)
-	case esDatetime:
+	case esDatetime, esDate:
+		if reflect.TypeOf(value).Kind().String() == "float64" {
+			secs := int64(value.(float64)) / 1000
+			return time.Unix(secs, 0).Format("2006-01-02 15:04:05")
+		}
 		t, err := time.Parse(time.RFC3339, value.(string))
 		if err != nil {
 			return nil

@@ -28,7 +28,7 @@ func (r *Rows) ColumnTypeScanType(index int) (refType reflect.Type) {
 		refType = reflect.TypeOf(int(0))
 	case esBoolean:
 		refType = reflect.TypeOf(true)
-	case esDatetime:
+	case esDatetime, esDate:
 		refType = reflect.TypeOf(time.Time{})
 	case esNull:
 		refType = nil

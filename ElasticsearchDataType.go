@@ -19,6 +19,7 @@ const (
 	esText        esType = "text"
 	esBinary      esType = "binary"
 	esDatetime    esType = "datetime"
+	esDate        esType = "date"
 	esIP          esType = "ip"
 	esObject      esType = "object"
 	esNested      esType = "nested"
