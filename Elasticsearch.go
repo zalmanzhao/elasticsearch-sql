@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -186,7 +187,10 @@ func typeConvert(t esType, value interface{}) driver.Value {
 	case esKeyword, esText, esIP:
 		return value.(string)
 	case esShort, esLong, esFloat, esHalfFloat, esScaledFloat, esDouble:
-		return value.(float64)
+		oldNum := value.(float64)
+		newNum := big.NewRat(1, 1)
+		newNum.SetFloat64(oldNum)
+		return newNum.FloatString(0)
 	case esInteger:
 		return int(value.(float64))
 	case esBoolean:
