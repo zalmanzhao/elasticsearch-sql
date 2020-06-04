@@ -202,7 +202,7 @@ func typeConvert(t esType, value interface{}) driver.Value {
 		}
 		t, err := time.Parse(time.RFC3339, value.(string))
 		if err != nil {
-			return nil
+			return value.(string)
 		}
 		return t
 	case esNull:
