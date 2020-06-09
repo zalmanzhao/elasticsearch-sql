@@ -160,8 +160,8 @@ func esRequest(dsn string, body string) (*Rows, error) {
 	var rows [][]driver.Value
 	for _, values := range esResult.Rows {
 		var row []driver.Value
-		for i, value := range values {
-			row = append(row, typeConvert(types[i], value))
+		for _, value := range values {
+			row = append(row, fmt.Sprintf("%v", value))
 		}
 		rows = append(rows, row)
 	}
