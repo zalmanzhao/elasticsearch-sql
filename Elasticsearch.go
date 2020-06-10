@@ -10,9 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
-	"reflect"
 	"strings"
-	"time"
 )
 
 type esQueryRequest struct {
@@ -161,8 +159,8 @@ func esRequest(dsn string, body string) (*Rows, error) {
 	var rows [][]driver.Value
 	for _, values := range esResult.Rows {
 		var row []driver.Value
-		for _, value := range values {
-			row = append(row, fmt.Sprintf("%v", value))
+		for i, value := range values {
+			row = append(row, typeConvert(types[i], value))
 		}
 		rows = append(rows, row)
 	}
@@ -185,8 +183,8 @@ func typeConvert(t esType, value interface{}) driver.Value {
 		return ""
 	}
 	switch t {
-	case esKeyword, esText, esIP:
-		return value.(string)
+	case esKeyword, esText, esIP, esDatetime, esDate:
+		return fmt.Sprintf("%v", value)
 	case esShort, esLong, esFloat, esHalfFloat, esScaledFloat, esDouble:
 		oldNum := value.(float64)
 		newNum := big.NewRat(1, 1)
@@ -196,16 +194,6 @@ func typeConvert(t esType, value interface{}) driver.Value {
 		return int(value.(float64))
 	case esBoolean:
 		return value.(bool)
-	case esDatetime, esDate:
-		if reflect.TypeOf(value).Kind().String() == "float64" {
-			secs := int64(value.(float64)) / 1000
-			return time.Unix(secs, 0).Format("2006-01-02 15:04:05")
-		}
-		t, err := time.Parse(time.RFC3339, value.(string))
-		if err != nil {
-			return value.(string)
-		}
-		return t
 	case esNull:
 		return nil
 	default:
