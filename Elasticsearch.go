@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 type esQueryRequest struct {
@@ -183,7 +184,7 @@ func typeConvert(t esType, value interface{}) driver.Value {
 		return ""
 	}
 	switch t {
-	case esKeyword, esText, esIP, esDatetime, esDate:
+	case esKeyword, esText, esIP:
 		return fmt.Sprintf("%v", value)
 	case esShort, esLong, esFloat, esHalfFloat, esScaledFloat, esDouble:
 		oldNum := value.(float64)
@@ -194,6 +195,16 @@ func typeConvert(t esType, value interface{}) driver.Value {
 		return int(value.(float64))
 	case esBoolean:
 		return value.(bool)
+	case esDatetime, esDate:
+		oldNum := value.(float64)
+		newNum := big.NewRat(1, 1)
+		newNum.SetFloat64(oldNum)
+		format := "2006-01-02 15:04:05"
+		if (len(newNum.FloatString(0)) == 13) {
+			return time.Unix(int64(value.(float64)) / 1000, 0).Format(format)
+		} else {
+			return time.Unix(int64(value.(float64)), 0).Format(format)
+		}
 	case esNull:
 		return nil
 	default:
