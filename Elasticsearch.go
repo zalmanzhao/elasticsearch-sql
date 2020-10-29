@@ -196,14 +196,19 @@ func typeConvert(t esType, value interface{}) driver.Value {
 	case esBoolean:
 		return value.(bool)
 	case esDatetime, esDate:
-		oldNum := value.(float64)
-		newNum := big.NewRat(1, 1)
-		newNum.SetFloat64(oldNum)
-		format := "2006-01-02 15:04:05"
-		if (len(newNum.FloatString(0)) == 13) {
-			return time.Unix(int64(value.(float64)) / 1000, 0).Format(format)
-		} else {
-			return time.Unix(int64(value.(float64)), 0).Format(format)
+		switch value.(type) {
+		case string:
+			return fmt.Sprintf("%v", value)
+		default:
+			oldNum := value.(float64)
+			newNum := big.NewRat(1, 1)
+			newNum.SetFloat64(oldNum)
+			format := "2006-01-02 15:04:05"
+			if (len(newNum.FloatString(0)) == 13) {
+				return time.Unix(int64(value.(float64))/1000, 0).Format(format)
+			} else {
+				return time.Unix(int64(value.(float64)), 0).Format(format)
+			}
 		}
 	case esNull:
 		return nil
