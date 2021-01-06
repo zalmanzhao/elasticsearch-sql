@@ -9,7 +9,6 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -94,7 +93,7 @@ func parsingDSN(dsn string) (url, username, password string, err error) {
 		}
 	}
 
-	return protocal + "://" + address + ":" + port + "/_opendistro/_sql?format=jdbc&sql=", username, password, nil
+	return protocal + "://" + address + ":" + port + "/_opendistro/_sql?format=jdbc", username, password, nil
 }
 
 func getEs(dsn string, body string) (string, error) {
@@ -104,7 +103,8 @@ func getEs(dsn string, body string) (string, error) {
 	}
 
 	client := http.Client{}
-	req, err := http.NewRequest("GET", urld + url.PathEscape(strings.ReplaceAll(body, ";", "")), nil)
+	payload := strings.NewReader(fmt.Sprintf("{'query': '%s'}", strings.ReplaceAll(body, ";", "")))
+	req, err := http.NewRequest("POST", urld, payload)
 	if err != nil {
 		return "", err
 	}
