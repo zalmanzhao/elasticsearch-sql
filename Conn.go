@@ -1,8 +1,10 @@
 package elasticsearch
 
 import (
+	"context"
 	"database/sql/driver"
 	"fmt"
+	"sync"
 )
 
 // DialContextFunc is a function which can be used to establish the network connection.
