@@ -50,7 +50,7 @@ func nextRows(dsn string, cursor string) ([][]driver.Value, string, error) {
 	return (*result).rows, (*result).cursor, err
 }
 
-func parsingDSN(dsn string) (url, username, password string, err error) {
+func parsingDSN(dsn string) (url, network, username, password string, err error) {
 	var protocal, address, port, certBase64 string
 
 	dnsParts := strings.Split(dsn, "://")
@@ -60,6 +60,12 @@ func parsingDSN(dsn string) (url, username, password string, err error) {
 	} else {
 		protocal = dnsParts[0]
 		dsn = dnsParts[1]
+	}
+
+	protocals := strings.Split(protocal, "+")
+	if len(dnsParts) == 2 {
+		protocal = protocals[0]
+		network = protocals[1]
 	}
 
 	dnsParts = strings.Split(dsn, "@")
@@ -74,7 +80,7 @@ func parsingDSN(dsn string) (url, username, password string, err error) {
 	if certBase64 != "" {
 		certByte, err := base64.URLEncoding.DecodeString(certBase64)
 		if err != nil {
-			return "", "", "", ErrInvalidArgs
+			return "", "", "", "", ErrInvalidArgs
 		}
 		certPart := strings.Split(string(certByte), ":")
 		username, password = certPart[0], certPart[1]
@@ -93,7 +99,7 @@ func parsingDSN(dsn string) (url, username, password string, err error) {
 		}
 	}
 
-	return protocal + "://" + address + ":" + port + "/_opendistro/_sql?format=jdbc", username, password, nil
+	return protocal + "://" + address + ":" + port + "/_opendistro/_sql?format=jdbc", network, username, password, nil
 }
 
 func getEs(dsn string, body string) (string, error) {
@@ -103,6 +109,17 @@ func getEs(dsn string, body string) (string, error) {
 	}
 
 	client := http.Client{}
+
+	// Connect to Server
+	dialsLock.RLock()
+	dial, ok := dials[network]
+	dialsLock.RUnlock()
+	if ok {
+		client.Transport = &http.Transport{
+			DialContext: dial,
+		}
+	}
+
 	payload := strings.NewReader(fmt.Sprintf("{'query': '%s'}", strings.ReplaceAll(body, ";", "")))
 	req, err := http.NewRequest("POST", urld, payload)
 	if err != nil {

@@ -5,6 +5,25 @@ import (
 	"fmt"
 )
 
+// DialContextFunc is a function which can be used to establish the network connection.
+// Custom dial functions must be registered with RegisterDialContext
+type DialContextFunc func(ctx context.Context, netwotk, addr string) (net.Conn, error)
+
+var (
+	dialsLock sync.RWMutex
+	dials     map[string]DialContextFunc
+)
+
+// RegisterDialContext registers a custom dial function.
+func RegisterDialContext(net string, dial DialContextFunc) {
+	dialsLock.Lock()
+	defer dialsLock.Unlock()
+	if dials == nil {
+		dials = make(map[string]DialContextFunc)
+	}
+	dials[net] = dial
+}
+
 //Conn is a connection to a database
 type Conn struct {
 	dsn string
