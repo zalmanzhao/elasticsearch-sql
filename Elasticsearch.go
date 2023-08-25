@@ -103,7 +103,7 @@ func parsingDSN(dsn string) (url, network, username, password string, err error)
 }
 
 func getEs(dsn string, body string) (string, error) {
-	urld, username, password, err := parsingDSN(dsn)
+	urld, network, username, password, err := parsingDSN(dsn)
 	if err != nil {
 		return "", err
 	}
